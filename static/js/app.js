@@ -588,8 +588,13 @@ function renderTrackerView() {
                                         <h5 style="margin: 0; font-size: 0.95rem;">${escapeHtml(t.name)}</h5>
                                         <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(t.description)}</p>
                                     </div>
-                                    <div class="task-meta">
+                                    <div class="task-meta" style="display: flex; flex-direction: column; align-items: flex-end; justify-content: center;">
                                         <span class="duration-tag">${t.hours || 0}h</span>
+                                        ${t.resource_url && t.resource_url !== '#' ? `
+                                            <a href="${t.resource_url}" target="_blank" class="resource-link" style="font-size: 0.7rem; color: var(--accent); white-space: nowrap;">
+                                                🔗 ${escapeHtml(t.resource || 'Resource')}
+                                            </a>
+                                        ` : ''}
                                     </div>
                                 </div>
                             </div>
@@ -600,6 +605,33 @@ function renderTrackerView() {
         `;
         container.appendChild(acc);
     });
+
+    // --- NEW: Global Resources for Saved Plans ---
+    if (currentPlan.resources && currentPlan.resources.length > 0) {
+        const resSec = document.createElement('div');
+        resSec.style.marginTop = '48px';
+        resSec.innerHTML = `
+            <div class="sidebar-section-title" style="margin-bottom: 16px;">📚 RECOMMENDED RESOURCES</div>
+            <div class="resources-grid"></div>
+        `;
+        const grid = resSec.querySelector('.resources-grid');
+        currentPlan.resources.forEach(cat => {
+            const catEl = document.createElement('div');
+            catEl.className = 'resource-card';
+            catEl.innerHTML = `
+                <div class="resource-cat">${escapeHtml(cat.category)}</div>
+                <div class="resource-list" style="list-style: none;">
+                    ${cat.items.map(item => `
+                        <li style="margin-bottom: 8px;">
+                            <a href="${item.url}" target="_blank" style="color: var(--accent); font-weight: 500;">${escapeHtml(item.name)}</a>
+                        </li>
+                    `).join('')}
+                </div>
+            `;
+            grid.appendChild(catEl);
+        });
+        container.appendChild(resSec);
+    }
 
     updateTrackerProgress();
 }

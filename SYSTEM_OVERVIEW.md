@@ -105,6 +105,7 @@ The system uses a lightweight **SQLite** backend to ensure user data is not lost
 The **Tracker View** converts a static roadmap into an active project management tool:
 - **Checkbox Feedback**: Striking through completed tasks triggers an instant database update (auto-save).
 - **Progress Analytics**: A dynamic progress bar and "Hours Done" stats provide real-time insights into the user's journey.
+- **Resource Persistence**: Every individual topic resource and the global resource library are persistently saved and displayed within the tracker, ensuring the user always has the tools they need.
 - **Post-Save Refinement**: Even after a plan is saved, users can chat with the AI to modify the existing roadmap (e.g., "Adjust Month 2's difficulty").
 
 ---
