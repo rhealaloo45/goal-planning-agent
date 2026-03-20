@@ -16,27 +16,26 @@
         <div class="loader"></div>
     </div>
 
-    <div class="app-container">
-        
-        <!-- Top Navbar -->
-        <header class="top-navbar">
-            <a href="/" class="brand">
-                <span class="icon">🎯</span> Goal Agent
-            </a>
-            <nav class="nav-links">
-                <button class="nav-link-btn" onclick="resetAll()">New Plan</button>
-                <button class="nav-link-btn" onclick="location.reload()">My Plans</button>
-                <button class="nav-link-btn primary" id="navCalendarBtn" onclick="openCalendarModal()" style="display:none;">Add to Calendar</button>
-            </nav>
-        </header>
+    <!-- Global Sidebar & Generator Concept (Unifying the Sidebar Logic) -->
+    <header class="top-navbar">
+        <div class="nav-container">
+            <div class="logo">GOAL AGENT</div>
+            <div class="nav-tabs">
+                <button class="nav-tab active" id="tabGenerator" onclick="switchTab('generator')">PLAN GENERATOR</button>
+                <button class="nav-tab" id="tabMyPlans" onclick="switchTab('myplans')">MY SAVED PLANS</button>
+            </div>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <button class="nav-btn" id="navNewBtn" onclick="resetApp()">New Plan</button>
+                <button class="nav-btn" id="navCalendarBtn" style="display: none;" onclick="exportCalendar()">Export .ics</button>
+            </div>
+        </div>
+    </header>
 
-        <section class="main-wrapper">
-            
-            <!-- LEFT SIDEBAR: Goal & Clarification & Chat -->
+    <div class="main-wrapper">
+        <!-- PLAN GENERATOR VIEW -->
+        <div class="app-container" id="generatorView">
             <aside class="sidebar">
                 <div class="sidebar-scroll">
-                    
-                    <!-- Goal Input -->
                     <div id="goalInputSection" class="sidebar-block">
                         <div class="sidebar-section-title">SET A NEW GOAL</div>
                         <textarea id="goalInput" class="goal-textarea" placeholder="What do you want to achieve?" rows="3"></textarea>
@@ -51,21 +50,16 @@
                         </div>
                     </div>
 
-                    <!-- Clarification (Inside Sidebar) -->
                     <div id="clarifySection" class="sidebar-block hidden" style="margin-top: 32px;">
                         <div class="sidebar-section-title">CLARIFICATIONS</div>
-                        <div id="clarifyQuestions" class="clarify-container">
-                            <!-- Questions rendered via JS -->
-                        </div>
+                        <div id="clarifyQuestions" class="clarify-container"></div>
                         <div class="d-flex gap-2 mt-4" style="display:flex; gap:8px;">
                             <button class="btn-full" onclick="submitClarification()">Create Plan</button>
                             <button class="btn-full" style="background:var(--bg-hover); color:var(--text-secondary);" onclick="skipClarification()">Skip</button>
                         </div>
                     </div>
-
                 </div>
 
-                <!-- Refinement Chat (Sticky at Bottom) -->
                 <div class="sidebar-footer hidden" id="chatFooter">
                     <div class="sidebar-section-title">REFINE WITH AI</div>
                     <div class="mini-chat">
@@ -82,29 +76,25 @@
                 </div>
             </aside>
 
-            <!-- RIGHT MAIN PANEL: Plan Visualization -->
             <main class="content-canvas">
-                
-                <!-- Initial Welcome View -->
                 <div id="welcomeView" class="text-center" style="max-width: 600px; margin: 100px auto; text-align: center;">
                     <span style="font-size: 3rem;">👋</span>
                     <h2 style="margin-top: 16px; font-weight: 800;">Ready to plan?</h2>
                     <p style="color: var(--text-secondary); margin-top: 8px;">Enter a high-level goal in the sidebar and we'll break it down into a week-by-week actionable roadmap.</p>
                 </div>
 
-                <!-- Plan Content -->
                 <div id="planSection" class="hidden">
-                    
-                    <!-- Goal Summary -->
                     <div class="card" id="summaryCard">
-                        <div class="sidebar-section-title">PROJECT GOAL</div>
+                        <div class="plan-header">
+                            <div class="sidebar-section-title" id="planTitle">PROJECT GOAL</div>
+                            <button class="btn-save" id="btnSavePlan" onclick="saveCurrentPlan()" style="display: none;">Save to My Plans</button>
+                        </div>
                         <p id="goalSummaryText" style="font-size: 1.1rem; font-weight: 500;"></p>
                     </div>
 
-                    <!-- Stats Row -->
                     <div style="display: flex; gap: 16px; margin-bottom: 24px;">
                         <div class="card" style="flex:1; padding: 16px; text-align:center;">
-                            <div class="sidebar-section-title" style="margin-bottom:4px;">WEEKS/PERIODS</div>
+                            <div class="sidebar-section-title" id="statDurationLabel" style="margin-bottom:4px;">PLAN DURATION</div>
                             <div id="statWeeks" style="font-size: 1.5rem; font-weight: 800; color: var(--accent);">0</div>
                         </div>
                         <div class="card" style="flex:1; padding: 16px; text-align:center;">
@@ -117,48 +107,72 @@
                         </div>
                     </div>
 
-                    <!-- Timeline Navigation -->
                     <div class="sidebar-section-title">PHASES & WEEKS</div>
-                    <div class="timeline-stepper" id="timelineStepper">
-                        <!-- Horizontal steps rendered via JS -->
-                    </div>
+                    <div class="timeline-stepper" id="timelineStepper"></div>
 
-                    <!-- Weekly Breakdown (Accordion) -->
                     <div class="sidebar-section-title">ROADMAP DETAILS</div>
-                    <div id="weekBreakdown" class="breakdown-container">
-                        <!-- Accordions rendered via JS -->
-                    </div>
+                    <div id="weekBreakdown" class="breakdown-container"></div>
 
-                    <!-- Events & Opportunities (Conditional) -->
                     <div id="eventsSection" class="hidden" style="margin-top: 32px;">
                         <div class="sidebar-section-title">REAL-WORLD OPPORTUNITIES & EVENTS</div>
-                        <div class="resources-grid" id="eventsListInline" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
-                            <!-- Events rendered via JS -->
+                        <div class="resources-grid" id="eventsListInline" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));"></div>
+                    </div>
+
+                    <div class="sidebar-section-title">RESOURCES</div>
+                    <div class="resources-grid" id="resourcesGrid"></div>
+                </div>
+            </main>
+        </div>
+
+        <!-- MY SAVED PLANS VIEW -->
+        <div class="app-container hidden" id="myPlansView">
+            <main class="main-panel" style="width: 100%; border-left: none;">
+                <div class="plan-header" style="margin-bottom: 32px;">
+                    <div style="font-size: 1.8rem; font-weight: 800;">My Saved Plans</div>
+                </div>
+                <div class="plans-grid" id="plansGrid"></div>
+            </main>
+        </div>
+
+        <!-- TRACKER DETAIL VIEW -->
+        <div class="app-container hidden" id="trackerView">
+            <div class="tracker-header">
+                <div class="tracker-nav">
+                    <button class="btn-back" onclick="switchTab('myplans')">← Back to Plans</button>
+                    <div id="trackerGoalTitle" style="font-weight: 800; font-size: 1.2rem;">Track Your Progress</div>
+                    <div style="font-size: 0.7rem; color: var(--success); font-weight: 700;">● AUTO-SAVED</div>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-info">
+                        <span id="trackerProgressText">0% Complete</span>
+                        <span id="trackerTasksRem" style="font-size: 0.8rem; color: var(--text-muted);">0 tasks remaining</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div id="trackerProgressBar" class="progress-bar-fill" style="width: 0%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="app-content-tracker" style="display: flex; height: calc(100vh - 140px); margin-top: 140px; width: 100%;">
+                <main class="main-panel" id="trackerMainPanel" style="flex: 1; overflow-y: auto; padding: 40px; border-right: 1px solid var(--border);">
+                    <!-- Full plan with checkboxes -->
+                </main>
+                
+                <aside class="sidebar" style="width: 320px; background: #fafafa; border-left: 1px solid var(--border); overflow: hidden;">
+                    <div class="sidebar-inner" style="height: 100%; display: flex; flex-direction: column; padding: 24px; box-sizing: border-box;">
+                        <div class="sidebar-section-title">PLAN STATS</div>
+                        <div id="trackerStats" style="margin-bottom: 24px;"></div>
+                        
+                        <div class="sidebar-section-title">REFINEMENT CHAT</div>
+                        <div class="chat-area" id="trackerChatArea">
+                            <div style="color: var(--text-muted); font-style: italic; font-size: 0.8rem; padding: 10px;">Need changes? Chat with the AI.</div>
+                        </div>
+                        <div class="chat-input-box">
+                            <textarea id="trackerChatInput" placeholder="Make it shorter..." class="chat-textarea" rows="1" onkeydown="trackerChatKeydown(event)"></textarea>
+                            <button class="chat-submit" onclick="refineSavedPlan()">→</button>
                         </div>
                     </div>
-
-                    <!-- Resources -->
-                    <div class="sidebar-section-title">RESOURCES</div>
-                    <div class="resources-grid" id="resourcesGrid">
-                        <!-- Resource cards rendered via JS -->
-                    </div>
-
-                </div>
-
-            </main>
-        </section>
-    </div>
-
-    <!-- Events Recommendation Modal (REMOVED) -->
-
-    <!-- Calendar Start Date Modal -->
-    <div class="loading-overlay" id="calendarModal" style="background: rgba(0,0,0,0.4); backdrop-filter: blur(2px);">
-        <div class="card" style="max-width: 360px; width: 90%;">
-            <div class="sidebar-section-title">SELECT START DATE</div>
-            <input type="date" id="calendarStartDate" class="goal-textarea" style="background: white;">
-            <div style="display: flex; gap: 8px;">
-                <button class="btn-full" onclick="exportCalendar()">Download .ics</button>
-                <button class="btn-full" style="background:var(--bg-hover); color:var(--text-secondary);" onclick="closeCalendarModal()">Cancel</button>
+                </aside>
             </div>
         </div>
     </div>

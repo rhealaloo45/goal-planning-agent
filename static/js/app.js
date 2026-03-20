@@ -1,15 +1,22 @@
 /**
- * Goal Agent — Frontend Logic (SaaS Refactored)
- * ============================================
- * Handles: split-view UI navigation, accordion expansions,
- * horizontal timeline stepping, and sidebar refinement.
+ * Goal Agent — Frontend Logic
+ * ==========================
+ * Handles UI navigation, plan generation, and tracking.
  */
+window.addEventListener('error', e => {
+    console.error('GLOBAL JS ERROR:', e.error);
+    alert('UI Error: ' + e.message);
+});
 
 // ────── State ──────
 let currentGoal = '';
+let currentPlan = null;
 let currentEvents = [];
 let timelineUnit = 'Week';
 let activeWeekIdx = 0;
+let currentPlanID = null;
+let completedTasks = []; // list of periodIndex_topicIndex
+let currentQuestions = []; // for clarification
 
 // ────── DOM ──────
 const $ = id => document.getElementById(id);
@@ -22,8 +29,8 @@ const chatFooter = $('chatFooter');
 const clarifySection = $('clarifySection');
 const clarifyQuestions = $('clarifyQuestions');
 
-function show(el) { if(el) el.classList.remove('hidden'); }
-function hide(el) { if(el) el.classList.add('hidden'); }
+function show(el) { if(el) { el.classList.remove('hidden'); el.style.display = ''; } }
+function hide(el) { if(el) { el.classList.add('hidden'); el.style.display = 'none'; } }
 function showLoader(txt) { loader.classList.add('active'); if(txt) console.log(txt); }
 function hideLoader() { loader.classList.remove('active'); }
 
@@ -54,27 +61,26 @@ async function submitGoal() {
 
     try {
         btnGenerate.disabled = true;
-        showLoader('Analyzing your goal...');
+        showLoader('Strategizing and researching your roadmap...');
         const data = await api('/start', { goal });
 
         if (data.status === 'needs_clarification' && data.questions && data.questions.length) {
             currentQuestions = data.questions;
             renderClarification(data.questions);
             show(clarifySection);
+            hide($('goalInputSection')); // Clear clutter
             hide(welcomeView);
         } else if (data.plan) {
             currentPlan = data.plan;
             if (data.events) currentEvents = data.events;
             if (data.timeline_unit) timelineUnit = data.timeline_unit;
             
-            hide(welcomeView);
-            hide(clarifySection);
-            renderFullPlan(data.plan);
-            show(planSection);
-            show(chatFooter);
-            $('navCalendarBtn').style.display = 'block';
+            if (data.events) currentEvents = data.events;
+            if (data.timeline_unit) timelineUnit = data.timeline_unit;
             
+            renderFullPlan(data.plan);
             renderEvents(currentEvents);
+            showPlanUI();
         }
     } catch (err) {
         alert('Error: ' + err.message);
@@ -82,6 +88,44 @@ async function submitGoal() {
         hideLoader();
         btnGenerate.disabled = false;
     }
+}
+
+// ────── Navigation Sync ──────
+
+function switchTab(tab) {
+    const generator = $('generatorView');
+    const myPlans = $('myPlansView');
+    const tracker = $('trackerView');
+    const tabGen = $('tabGenerator');
+    const tabPlans = $('tabMyPlans');
+
+    // Reset actives
+    [generator, myPlans, tracker].forEach(hide);
+    [tabGen, tabPlans].forEach(t => t.classList.remove('active'));
+
+    if (tab === 'generator') {
+        show(generator);
+        tabGen.classList.add('active');
+    } else if (tab === 'myplans') {
+        show(myPlans);
+        tabPlans.classList.add('active');
+        listSavedPlans();
+    } else if (tab === 'tracker') {
+        show(tracker);
+    }
+}
+
+function showPlanUI() {
+    hide(welcomeView);
+    hide(clarifySection);
+    show(planSection);
+    show(chatFooter);
+    
+    const calBtn = $('navCalendarBtn');
+    if (calBtn) calBtn.style.display = 'block';
+    
+    const saveBtn = $('btnSavePlan');
+    if (saveBtn) saveBtn.style.display = 'block';
 }
 
 // ────── Clarification UI ──────
@@ -141,12 +185,9 @@ async function submitClarification() {
             currentEvents = data.events || [];
             timelineUnit = data.timeline_unit || 'Week';
             
-            hide(clarifySection);
             renderFullPlan(data.plan);
-            show(planSection);
-            show(chatFooter);
-            $('navCalendarBtn').style.display = 'block';
             renderEvents(currentEvents);
+            showPlanUI();
         }
     } catch (err) {
         alert('Error: ' + err.message);
@@ -162,12 +203,9 @@ async function skipClarification() {
             currentEvents = data.events || [];
             timelineUnit = data.timeline_unit || 'Week';
             
-            hide(clarifySection);
             renderFullPlan(data.plan);
-            show(planSection);
-            show(chatFooter);
-            $('navCalendarBtn').style.display = 'block';
             renderEvents(currentEvents);
+            showPlanUI();
         }
     } catch (err) { alert('Error: ' + err.message); }
     finally { hideLoader(); }
@@ -185,18 +223,17 @@ function renderFullPlan(plan) {
     let totalHours = 0;
     timeline.forEach(w => totalHours += (w.total_hours || 0));
     
-    $('statWeeks').textContent = timeline.length;
-    $('statHours').textContent = totalHours;
+    const timelineCount = timeline.length;
+    const unitText = timelineUnit.toUpperCase() + (timelineCount === 1 ? '' : 'S');
     
+    $('statWeeks').textContent = `${timelineCount} ${unitText}`;
+    $('statHours').textContent = totalHours;
+    if ($('statDurationLabel')) $('statDurationLabel').textContent = `TOTAL ${unitText}`;
+
     // Intensity badge
-    const intensity = totalHours / (timeline.length || 1);
+    const intensity = totalHours / (timelineCount || 1);
     const intensityLabel = intensity > 20 ? 'High' : intensity > 10 ? 'Medium' : 'Light';
     $('statIntensity').textContent = intensityLabel;
-    
-    // Update labels in stats row based on unit
-    const unitUpper = timelineUnit.toUpperCase();
-    const statsRow = $('statWeeks').previousElementSibling;
-    if (statsRow) statsRow.textContent = `${unitUpper}S`;
 
     // Horizontal Stepper
     renderStepper(timeline);
@@ -309,15 +346,39 @@ function openWeek(idx) {
 
 function renderResources(resources) {
     const grid = $('resourcesGrid');
+    if (!grid) return;
     grid.innerHTML = '';
-    resources.forEach(cat => {
+
+    // Defensive: handle both categorized and flat lists
+    let normalized = [];
+    if (Array.isArray(resources)) {
+        if (resources.length > 0 && resources[0].category) {
+            normalized = resources;
+        } else {
+            // Flat list of {name, url}
+            normalized = [{ category: 'Learning Materials', items: resources }];
+        }
+    } else if (resources && typeof resources === 'object') {
+        // Handle cases where resources is an object like { "Tools": [...] }
+        Object.keys(resources).forEach(key => {
+            normalized.push({ category: key, items: resources[key] });
+        });
+    }
+
+    if (normalized.length === 0) {
+        grid.innerHTML = '<div style="color:var(--text-muted); font-size: 0.8rem; padding: 12px;">No specific resources listed.</div>';
+        return;
+    }
+
+    normalized.forEach(cat => {
+        if (!cat.category) return;
         const card = document.createElement('div');
         card.className = 'resource-card';
         card.innerHTML = `
             <div class="resource-cat">${escapeHtml(cat.category)}</div>
             <ul class="resource-list">
-                ${(cat.items || []).map(item => `
-                    <li><a href="${item.url || '#'}" target="_blank">${escapeHtml(item.name)}</a></li>
+                ${(Array.isArray(cat.items) ? cat.items : []).map(item => `
+                    <li><a href="${item.url || '#'}" target="_blank">${escapeHtml(item.name || 'Resource')}</a></li>
                 `).join('')}
             </ul>
         `;
@@ -372,9 +433,280 @@ async function sendChatMessage() {
 
 // ────── Calendar & Reset ──────
 
+async function resetApp() {
+    if (!confirm('Start a new plan? This will clear the current session.')) return;
+    hide(planSection);
+    hide(chatFooter);
+    hide(clarifySection);
+    show(welcomeView);
+    show($('goalInputSection'));
+    goalInput.value = '';
+    currentPlan = null;
+    currentGoal = '';
+    currentEvents = [];
+    activeWeekIdx = 0;
+    
+    // Smooth scroll to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 async function resetAll() {
-    await api('/reset').catch(() => {});
-    location.reload();
+    await resetApp();
+}
+
+// ────── Tracker & Persistence ──────
+
+async function saveCurrentPlan() {
+    if (!currentPlan) return;
+    try {
+        showLoader('Saving plan...');
+        const res = await fetch('/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ goal: currentGoal, plan: currentPlan })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert('Plan saved to "My Plans"!');
+            $('btnSavePlan').style.display = 'none';
+        }
+    } catch (err) {
+        alert('Save failed: ' + err.message);
+    } finally {
+        hideLoader();
+    }
+}
+
+async function listSavedPlans() {
+    const grid = $('plansGrid');
+    grid.innerHTML = '<div style="color:var(--text-muted);">Loading your plans...</div>';
+    try {
+        const res = await fetch('/plans');
+        const data = await res.json();
+        grid.innerHTML = '';
+        if (data.plans.length === 0) {
+            grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding: 40px; color:var(--text-muted);">No plans saved yet. Generate one and click "Save"!</div>';
+            return;
+        }
+
+        data.plans.forEach(p => {
+            const card = document.createElement('div');
+            card.className = 'plan-card';
+            const dateStr = new Date(p.created_at).toLocaleDateString();
+            card.innerHTML = `
+                <div>
+                    <div class="plan-card-title">${escapeHtml(p.goal)}</div>
+                    <div class="plan-card-date">Created: ${dateStr}</div>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 12px; height: 3.2em; overflow: hidden; line-height: 1.6;">${escapeHtml(p.summary)}</p>
+                </div>
+                <div class="plan-card-progress">
+                    <div class="progress-info" style="font-size: 0.75rem;">
+                        <span>Progress</span>
+                        <span>${p.progress}%</span>
+                    </div>
+                    <div class="mini-progress-bar">
+                        <div class="mini-progress-fill" style="width: ${p.progress}%"></div>
+                    </div>
+                    <button class="nav-btn" style="width: 100%; margin-top: 16px;" onclick="openPlanTracker('${p.id}')">Open Tracker</button>
+                    <button class="btn-back" style="font-size: 0.65rem; color: #ff6b6b; margin-top: 8px; width: 100%; justify-content: center;" onclick="deleteSavedPlan('${p.id}')">Delete Post</button>
+                </div>
+            `;
+            grid.appendChild(card);
+        });
+    } catch (err) {
+        grid.innerHTML = '<div style="color:red;">Error loading plans.</div>';
+    }
+}
+
+async function deleteSavedPlan(id) {
+    if (!confirm('Are you sure you want to delete this plan?')) return;
+    try {
+        await fetch(`/plans/delete/${id}`, { method: 'DELETE' });
+        listSavedPlans();
+    } catch (err) { alert('Delete failed'); }
+}
+
+async function openPlanTracker(id) {
+    try {
+        showLoader('Opening plan...');
+        const res = await fetch(`/plans/${id}`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        currentPlanID = id;
+        currentPlan = data.plan;
+        completedTasks = data.completed_tasks || [];
+        timelineUnit = currentPlan.timeline_unit || 'Week';
+
+        $('trackerGoalTitle').textContent = data.goal;
+        switchTab('tracker');
+        renderTrackerView();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    } finally {
+        hideLoader();
+    }
+}
+
+function renderTrackerView() {
+    const container = $('trackerMainPanel');
+    container.innerHTML = '';
+
+    const timeline = currentPlan.timeline || [];
+    
+    // Render as Accordions but with checkboxes
+    timeline.forEach((period, pi) => {
+        const acc = document.createElement('div');
+        acc.className = 'week-accordion open'; // Keep open in tracker for easy scroll
+        
+        let checkedCount = 0;
+        const total = period.topics.length;
+        period.topics.forEach((_, ti) => {
+            if (completedTasks.includes(`${pi}_${ti}`)) checkedCount++;
+        });
+
+        acc.innerHTML = `
+            <div class="accordion-header">
+                <div class="accordion-title">
+                    <div class="week-num-badge">${pi + 1}</div>
+                    <div style="font-weight: 800;">${escapeHtml(period.title || period.period || 'Phase')}</div>
+                    <div style="font-size: 0.7rem; color: var(--text-muted);">${checkedCount}/${total} Completed</div>
+                </div>
+            </div>
+            <div class="accordion-body" style="display: block;">
+                <div class="topics-list">
+                    ${period.topics.map((t, ti) => {
+                        const taskId = `${pi}_${ti}`;
+                        const isDone = completedTasks.includes(taskId);
+                        return `
+                            <div class="day-row" style="display: flex; align-items: center; gap: 16px;">
+                                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--success);" 
+                                    ${isDone ? 'checked' : ''} 
+                                    onchange="toggleTask(${pi}, ${ti}, this)">
+                                <div class="task-item" style="flex: 1; opacity: ${isDone ? '0.5' : '1'}; text-decoration: ${isDone ? 'line-through' : 'none'}; transition: all 0.2s;">
+                                    <div class="task-content">
+                                        <h5 style="margin: 0; font-size: 0.95rem;">${escapeHtml(t.name)}</h5>
+                                        <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(t.description)}</p>
+                                    </div>
+                                    <div class="task-meta">
+                                        <span class="duration-tag">${t.hours || 0}h</span>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+        container.appendChild(acc);
+    });
+
+    updateTrackerProgress();
+}
+
+function updateTrackerProgress() {
+    const timeline = currentPlan.timeline || [];
+    let total = 0;
+    let done = 0;
+    let totalHoursPlanned = 0;
+    let totalHoursDone = 0;
+
+    timeline.forEach((p, pi) => {
+        p.topics.forEach((t, ti) => {
+            total++;
+            totalHoursPlanned += (t.hours || 0);
+            if (completedTasks.includes(`${pi}_${ti}`)) {
+                done++;
+                totalHoursDone += (t.hours || 0);
+            }
+        });
+    });
+
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    $('trackerProgressBar').style.width = `${percent}%`;
+    $('trackerProgressText').textContent = `${percent}% Complete`;
+    $('trackerTasksRem').textContent = `${total - done} tasks remaining`;
+
+    $('trackerStats').innerHTML = `
+        <div class="card" style="padding: 12px; margin-bottom: 12px;">
+            <div style="font-size: 0.7rem; color: var(--text-muted);">HOURS DONE</div>
+            <div style="font-size: 1.2rem; font-weight: 800; color: var(--success);">${totalHoursDone} / ${totalHoursPlanned}h</div>
+        </div>
+        <div class="card" style="padding: 12px; margin-bottom: 0;">
+            <div style="font-size: 0.7rem; color: var(--text-muted);">MILESTONE</div>
+            <div style="font-size: 0.85rem; font-weight: 600;">Keep going!</div>
+        </div>
+    `;
+}
+
+async function toggleTask(pi, ti, checkbox) {
+    const taskId = `${pi}_${ti}`;
+    if (checkbox.checked) {
+        if (!completedTasks.includes(taskId)) completedTasks.push(taskId);
+    } else {
+        completedTasks = completedTasks.filter(id => id !== taskId);
+    }
+
+    renderTrackerView(); // Updates visuals strike-through
+
+    try {
+        await fetch('/toggle-task', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: currentPlanID, completed_tasks: completedTasks })
+        });
+    } catch (err) { console.error('Auto-save failed', err); }
+}
+
+function trackerChatKeydown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        refineSavedPlan();
+    }
+}
+
+async function refineSavedPlan() {
+    const msg = $('trackerChatInput').value.trim();
+    if (!msg) return;
+    
+    try {
+        showLoader('Updating plan with AI...');
+        $('trackerChatInput').value = '';
+        // Display user message in history
+        const userMsg = document.createElement('div');
+        userMsg.className = 'chat-bubble-wrapper user';
+        userMsg.innerHTML = `
+            <div class="chat-label">You</div>
+            <div class="chat-bubble">${escapeHtml(msg)}</div>
+        `;
+        $('trackerChatArea').appendChild(userMsg);
+        $('trackerChatArea').scrollTop = $('trackerChatArea').scrollHeight;
+
+        const res = await fetch('/save-refine', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: currentPlanID, message: msg })
+        });
+        const data = await res.json();
+        if (data.success && data.plan) {
+            currentPlan = data.plan;
+            renderTrackerView();
+            const msgEl = document.createElement('div');
+            msgEl.className = 'chat-bubble-wrapper ai';
+            msgEl.innerHTML = `
+                <div class="chat-label">Agent</div>
+                <div class="chat-bubble">✅ Plan adjusted successfully based on your request.</div>
+            `;
+            $('trackerChatArea').appendChild(msgEl);
+            $('trackerChatArea').scrollTop = $('trackerChatArea').scrollHeight;
+        } else {
+            alert(data.message || 'Update failed.');
+        }
+    } catch (err) {
+        alert('Chat error: ' + err.message);
+    } finally {
+        hideLoader();
+    }
 }
 
 function openCalendarModal() { $('calendarModal').classList.add('active'); }

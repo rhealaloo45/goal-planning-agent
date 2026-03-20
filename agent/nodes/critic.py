@@ -43,11 +43,12 @@ def critic_node(state: AgentState) -> dict:
         f"  1. SPECIFICITY — topics, hours, resources are concrete?\n"
         f"  2. FEASIBILITY — time estimates realistic?\n"
         f"  3. COMPLETENESS — covers the full goal?\n"
-        f"  4. RESOURCE QUALITY — real URLs included?\n"
-        f"  5. MILESTONES — actionable and measurable?\n\n"
+        f"  4. DURATION ALIGNMENT — does the timeline cover the user's requested timeframe? (e.g. if user said 2 years, does the plan span 2 years?)\n"
+        f"  5. RESOURCE QUALITY — real URLs included?\n"
+        f"  6. MILESTONES — actionable and measurable?\n\n"
         f"Respond with JSON:\n"
         f'{{"score": <1-10>, "issues": ["..."], "suggestions": ["..."]}}\n\n'
-        f"Be critical but fair. Score honestly."
+        f"Be extremely critical of duration mismatches. Score honestly."
     )
 
     raw = call_llm(

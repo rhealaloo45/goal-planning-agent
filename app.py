@@ -17,6 +17,7 @@ from flask import Flask, jsonify, request, render_template
 from dotenv import load_dotenv
 
 from agent.graph import main_graph, continue_graph
+from db import db
 
 load_dotenv()
 app = Flask(__name__)
@@ -193,6 +194,80 @@ def reset():
     global _last_state
     _last_state = None
     return jsonify({"status": "reset"})
+
+
+# ────── My Plans Persistence ──────
+
+@app.route("/save", methods=["POST"])
+def save():
+    data = request.get_json(force=True)
+    goal = data.get("goal")
+    plan = data.get("plan")
+    if not goal or not plan:
+        return jsonify({"error": "Goal and plan are required to save."}), 400
+    
+    plan_id = db.save_plan(goal, plan)
+    return jsonify({"success": True, "id": plan_id})
+
+@app.route("/plans", methods=["GET"])
+def list_plans():
+    plans = db.list_plans()
+    return jsonify({"plans": plans})
+
+@app.route("/plans/<plan_id>", methods=["GET"])
+def get_plan(plan_id):
+    plan_data = db.get_plan(plan_id)
+    if not plan_data:
+        return jsonify({"error": "Plan not found."}), 404
+    return jsonify(plan_data)
+
+@app.route("/plans/delete/<plan_id>", methods=["DELETE"])
+def delete_plan(plan_id):
+    db.delete_plan(plan_id)
+    return jsonify({"success": True})
+
+@app.route("/toggle-task", methods=["POST"])
+def toggle_task():
+    data = request.get_json(force=True)
+    plan_id = data.get("id")
+    completed = data.get("completed_tasks") # full array of IDs
+    if not plan_id:
+        return jsonify({"error": "ID is required."}), 400
+    
+    db.update_completed_tasks(plan_id, completed)
+    return jsonify({"success": True})
+
+@app.route("/save-refine", methods=["POST"])
+def save_refine():
+    """Refine a SAVED plan with AI logic."""
+    data = request.get_json(force=True)
+    plan_id = data.get("id")
+    message = data.get("message")
+    
+    saved_data = db.get_plan(plan_id)
+    if not saved_data: return jsonify({"error": "Plan not found"}), 404
+
+    state = {
+        "goal": saved_data["goal"],
+        "plan": saved_data["plan"],
+        "user_instruction": message,
+        "route": "refine",
+        "iteration_count": 0,
+        "critic_score": 0,
+        "events": [],
+        "timeline_unit": saved_data["plan"].get("timeline_unit", "Week"),
+        "status": "completed",
+        "clarified": True,
+        "questions": [],
+        "clarification_answers": {}
+    }
+
+    result = main_graph.invoke(state)
+    if result.get("plan"):
+        db.update_full_plan(plan_id, result["plan"])
+        return jsonify({"success": True, "plan": result["plan"]})
+    
+    return jsonify({"success": False, "message": "The AI could not refine your saved plan. Please try a different instruction."})
 
 
 @app.errorhandler(404)

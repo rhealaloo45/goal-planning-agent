@@ -64,11 +64,29 @@ def _simulate_response(prompt: str, expect_json: bool) -> str:
     lower = prompt.lower()
     if "needs_clarification" in lower or "enough information" in lower:
         return _simulate_clarification(prompt)
+    if "refine" in lower or "modify" in lower or "user's change request" in lower:
+        return _simulate_refinement(prompt)
     if "complete" in lower and "plan" in lower or "comprehensive plan" in lower or "weekly plan" in lower:
         return _simulate_full_plan(prompt)
     if expect_json:
         return json.dumps({"response": "Simulated response."})
     return "Simulated response."
+
+def _simulate_refinement(prompt: str) -> str:
+    """Mock a refined plan by slightly altering the existing one."""
+    match = re.search(r'```json\n(.*?)\n```', prompt, re.DOTALL)
+    if not match: return json.dumps({"timeline": [], "goal_summary": "Error: could not parse plan for simulation"})
+    
+    try:
+        plan = json.loads(match.group(1))
+        # Add a note to the goal summary
+        plan["goal_summary"] = plan.get("goal_summary", "") + " (Refined with your suggestions)"
+        # Maybe change hours slightly
+        if plan.get("timeline"):
+            plan["timeline"][0]["total_hours"] = 100 
+        return json.dumps(plan)
+    except:
+        return match.group(1) # Return as is
 
 
 # ---------------------------------------------------------------------------

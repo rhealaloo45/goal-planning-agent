@@ -21,28 +21,31 @@ def planner_node(state: AgentState) -> dict:
             context += f"  Q: {q}\n  A: {a}\n"
 
     prompt = (
-        f"You are an expert planning agent.\n\n"
-        f"Create a COMPLETE roadmap that matches the user's timeframe.\n"
+        f"You are an expert planning agent specialized in long-term career roadmaps.\n\n"
+        f"Create a COMPLETE roadmap that matches the user's timeframe exactly.\n"
         f"User's Goal: \"{goal}\"\n{context}\n\n"
         f"Respond with JSON:\n"
         f"1. \"timeline_unit\": \"Week\" | \"Month\" | \"Year\" (based on overall duration)\n"
-        f"2. \"goal_summary\": 2 sentences\n"
-        f"3. \"assumptions\": Array\n"
-        f"4. \"timeline\": Array of period objects:\n"
-        f"   - \"period\": e.g. \"Week 1\", \"Month 1\", \"Year 1\"\n"
-        f"   - \"title\": label\n"
-        f"   - \"total_hours\": per period\n"
+        f"2. \"goal_summary\": 2-3 sentence summary\n"
+        f"3. \"assumptions\": Array of strings\n"
+        f"4. \"timeline\": Array of period objects (MINIMUM 6, MAXIMUM 12 periods):\n"
+        f"   - \"period\": e.g. \"Month 1\", \"Year 1\", \"Phase 1\"\n"
+        f"   - \"title\": phase title\n"
+        f"   - \"total_hours\": hours for this period\n"
         f"   - \"topics\": array of objects (name, hours, resource, resource_url, description)\n"
-        f"   - \"milestone\": end goal\n"
-        f"5. \"resources\", \"time_commitment\", \"execution_strategy\"\n\n"
+        f"   - \"milestone\": achievement\n"
+        f"5. \"resources\": Array of {{\"category\": str, \"items\": [{{\"name\": str, \"url\": str}}]}}\n"
+        f"6. \"time_commitment\": Summary string\n"
+        f"7. \"execution_strategy\": High-level advice\n\n"
         f"Rules:\n"
-        f"  - Duration of timeline MUST match user request (e.g. 5 years = 5 major periods/phases).\n"
+        f"  - For long goals (e.g. 2 years), do NOT just give 2 years. Give 8 Quarters or 12-24 Months if possible.\n"
+        f"  - Specify exact CERTIFICATIONS and COURSES in topics.\n"
         f"  - Return JSON only."
     )
 
     raw = call_llm(
         prompt,
-        system_prompt="Comprehensive planning agent. Return JSON.",
+        system_prompt="Comprehensive planning agent. Return ONLY valid JSON.",
         expect_json=True,
     )
 
@@ -50,17 +53,19 @@ def planner_node(state: AgentState) -> dict:
         plan = json.loads(_clean_json(raw))
         _normalize(plan)
         
+        # Robustly find unit
         unit = plan.get("timeline_unit", "Week")
-        print(f"[Planner] Generated plan with {len(plan.get('timeline', []))} {unit}s")
-        
+        if not any(u in str(unit) for u in ["Week", "Month", "Year"]):
+            unit = "Week"
+            
         return {
             "plan": plan, 
-            "timeline_unit": unit,
+            "timeline_unit": str(unit).title(),
             "iteration_count": 0, 
             "critic_score": 0
         }
-    except (json.JSONDecodeError, KeyError):
-        print("[Planner] Parse failed, using fallback plan")
+    except Exception as e:
+        print(f"[Planner] Parse failed: {e}")
         return {
             "plan": _fallback(goal), 
             "timeline_unit": "Week",

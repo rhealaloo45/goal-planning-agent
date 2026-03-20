@@ -87,18 +87,59 @@ Every node shares a global `AgentState` object (TypedDict):
 
 ---
 
+---
+
+## 💾 Persistence & Data Layer (`db.py`)
+
+The system uses a lightweight **SQLite** backend to ensure user data is not lost between sessions.
+- **Persistent Plans**: All generated roadmaps can be "Saved" to the centralized database.
+- **Task Tracking**: The application stores the completion status of every individual topic in every week/phase.
+- **Relational Integrity**: Plans are assigned unique IDs and timestamps, allowing users to revisit and manage multiple goals simultaneously.
+
+---
+
+---
+
+## 📊 Plan Tracker & Interactive Dashboard
+
+The **Tracker View** converts a static roadmap into an active project management tool:
+- **Checkbox Feedback**: Striking through completed tasks triggers an instant database update (auto-save).
+- **Progress Analytics**: A dynamic progress bar and "Hours Done" stats provide real-time insights into the user's journey.
+- **Post-Save Refinement**: Even after a plan is saved, users can chat with the AI to modify the existing roadmap (e.g., "Adjust Month 2's difficulty").
+
+---
+
+## 💬 Conversational Refinement (Chatbot UI)
+
+The **Refinement Chat** has been evolved into a dedicated chatbot interface to make plan modifications natural and intuitive:
+- **Speech Bubble Interface**: Distinguishes between user instructions and agent responses using a modern, floating-bubble aesthetic.
+- **Integrated Action Controls**: The chat input is a consolidated "pill" box with a built-in "Send" button, providing a clear visual affordance for interaction.
+- **Real-time Feedback**: The agent provides immediate conversational confirmation (e.g., "✅ Plan adjusted...") before refreshing the roadmap view.
+- **Keyboard-First Workflow**: Supports the `Enter` key for instant submission, matching standard messaging software expectations.
+
+---
+
 ## 🎨 UI & Frontend Design
 
-Inspired by **Notion** and **Linear**, the frontend focuses on vertical whitespace and non-intrusive elements.
-- **Left Sidebar**: Permanent inputs and refinement chat.
-- **Right Panel**: Scrollable roadmap with horizontal steppers and interactive accordions.
-- **Opportunities Section**: An inline area that appears **only** if the Search node finds relevant events, providing a summary and "Add to Calendar" (.ics) links.
+Inspired by **Linear** and **Notion**, the multi-view interface is split into focused functional areas:
+
+### 1. Tabbed Navigation
+- **Plan Generator**: The "Home" for ideation, clarification, and first-draft generation.
+- **My Saved Plans**: A grid of all previously created roadmaps, showing goal summaries and completion percentages.
+- **Plan Tracker**: The dedicated execution view for a specific saved plan.
+
+### 2. Layout Components
+- **Top Navbar**: Global access to "New Plan", "iCal Export", and "Toggle View".
+- **Sidebar (Refinement)**: A sticky panel for chat-based AI updates that persists as you navigate the roadmap.
+- **Horizontal Stepper**: Visualizes the temporal phases (Weeks/Months/Years) of the goal.
+- **Interactive Accordions**: Cleanly organizes topic details, duration estimates, and curated resources.
 
 ---
 
 ## 🛠️ Technology Stack
 - **Framework**: Python 3.10+, LangGraph.
+- **Database**: SQLite (built-in relational storage).
 - **API**: Flask (Backend), Vanilla JS (Frontend).
-- **LLM**: Azure OpenAI (GPT-4o) with simulation fallback.
-- **Search**: `duckduckgo-search`.
+- **LLM**: Azure OpenAI (GPT-4o) with simulation fallback for resilience.
+- **Search**: `duckduckgo-search` (Live industry events & resources).
 - **Integrations**: RFC 5545 (iCalendar) generation for all roadmap periods and events.
