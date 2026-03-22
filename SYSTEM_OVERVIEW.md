@@ -9,28 +9,28 @@ The system is designed as a **cyclic Directed Acyclic Graph (DAG)**. Unlike line
 ### The Graph Flow
 ```mermaid
 graph TD
-    START(("__start__")) --> router["🔀 1. Router"]
+    S(("START")) --> r[1. Router]
     
     %% Planning Path
-    router -- "User Request" --> clarify["❓ 2. Clarifier"]
-    router -- "Plan" --> feasibility["✅ 3. FeasibilityChecker"]
-    feasibility --> planner["📋 4. Planner"]
-    router -- "Refinement" --> refinement["✏️ 5. Refinement"]
+    r -- "Clarify" --> c[2. Clarifier]
+    r -- "Plan" --> f[3. Feasibility]
+    f --> p[4. Planner]
+    r -- "Refinement" --> ref[5. Refinement]
     
-    %% Core Planning Loop
-    planner --> search["🌐 6. SearchNode"]
-    search --> critic["🔍 7. Critic"]
-    critic -- "Low Score" --> optimizer["⚡ 8. Optimizer"]
-    optimizer --> critic
+    %% Core Loop
+    p --> s[6. Search]
+    s --> cr[7. Critic]
+    cr -- "Optimize" --> o[8. Optimizer]
+    o --> cr
     
-    %% Finalization & Sync
-    critic -- "High Score" --> formatter["📐 9. Formatter"]
-    refinement --> formatter
-    formatter --> END(("PLAN GENERATED"))
+    %% Finalization
+    cr -- "Accept" --> fmt[9. Formatter]
+    ref --> fmt
+    fmt --> E(("GENERATED"))
 
-    %% Manual Persistence (User Triggered)
-    END -- "Save Button" --> task_sync["🤖 10. TaskSync (Google)"]
-    task_sync --> SAVE(("PLAN SAVED TO DB"))
+    %% DB Sync
+    E -- "Save" --> ts[10. Task Sync]
+    ts --> DB(("SAVED"))
 ```
 
 ---
@@ -40,34 +40,28 @@ graph TD
 The backend is modularized into specialized nodes located in `agent/nodes/`.
 
 ### 1. 🔀 Router (`router.py`)
-The "Brain" of the entry point. It uses an LLM to analyze the user's intent:
-- **Clarify**: If the goal is too broad to plan (e.g., "I want to be rich").
-- **Plan**: If it has enough context (target + timeline).
-- **Refinement**: If the user is asking for changes to an existing plan (e.g., "Make it more beginner-friendly").
+The "Brain" of the entry point. It analyzes user intent and routes to Clarification, Planning, or Refinement based on context richness.
 
 ### 2. ❓ Clarifier (`clarifier.py`)
-Generates high-impact questions with pre-defined options to narrow down the user's requirements.
+Generates high-impact questions with pre-defined options to narrow down ambiguous goals.
 
 ### 3. ✅ FeasibilityChecker (`feasibility_checker.py`)
-Analyzes goal realism against timelines before planning. Prevents "hallucinated" or impossible roadmaps by scoring feasibility (0-100).
+Scans goal realism against timelines before planning to prevent impossible roadmaps.
 
 ### 4. 📋 Planner (`planner.py`)
-The core architect. Determines Temporal Scale (Weeks/Months) and generates the structured roadmap.
+The core architect that determines the temporal scale and generates the week-by-week structure.
 
 ### 5. ✏️ Refinement (`refinement.py`)
-Handles Human-in-the-Loop modifications via conversational prompts to adjust existing plans.
+Handles Human-in-the-Loop modifications, allowing users to converse with the AI to adjust existing plans.
 
 ### 6. 🌐 SearchNode (`search.py`)
-Connects the agent to the live internet using **DuckDuckGo Search** to find real-world events and resources.
+Connects the agent to **DuckDuckGo Search** to find real-world events, webinars, and resources for 2026.
 
-### 7. 🔍 Critic (`critic.py`)
-Acts as a quality gate. It scores the plan (0-10) and sends it back for optimization if it fails to meet the 8/10 threshold.
-
-### 8. 📐 Formatter (`formatter.py`)
-Ensures the final JSON is sanitized, standardized, and ready for the frontend dashboard.
+### 7. 🔍 Critic (`critic.py`) & ⚡ Optimizer (`optimizer.py`)
+A feedback loop that ensures plan quality. Plans scoring below 8/10 are iteratively improved until they meet professional standards.
 
 ### 10. 🤖 TaskSyncNode (`task_sync.py`)
-Triggered on "Save." Automatically pushes plan topics to **Google Tasks**, mapping internal task states to external IDs for persistence.
+Integrates with the **Google Tasks API** to automatically sync roadmap topics once a plan is saved.
 
 ---
 
@@ -80,34 +74,31 @@ Every node shares a global `AgentState` object (TypedDict):
 | `plan` | The current structured roadmap JSON. |
 | `events`| Real-time internet opportunities discovered via Search. |
 | `google_task_ids`| Link between internal roadmap and Google Tasks. |
-| `timeline_unit`| "Week", "Month", or "Year" scale. |
+| `timeline_unit`| Scale of the plan (Week/Month/Year). |
 
 ---
 
-## 💾 Persistence & Data Layer (`db.py`)
+## 🛡️ Security & Data Privacy
 
-The system uses a lightweight **SQLite** backend to ensure user data is not lost between sessions.
-- **Persistent Plans**: All generated roadmaps can be "Saved" to the centralized database (`plans.db`).
-- **Task Tracking**: Stores the completion status of every individual topic, identifying them by unique `pi_ti` (PeriodIndex_TaskIndex) IDs.
-- **Relational Integrity**: Plans are assigned unique UUIDs and timestamps for versioning.
+To ensure sensitive information is protected, the system implements strict local data management:
+- **Secrets Management**: Files like `credentials.json`, `token.json`, and `.env` contain sensitive API keys and are explicitly ignored by version control (`.gitignore`).
+- **Local Persistence**: User data is stored in a local SQLite database (`plans.db`), which is also excluded from version control to prevent unwanted data leakage.
+- **OAuth 2.0**: Uses Google's secure OAuth flow to request only necessary permissions (`Google Tasks`).
 
 ---
 
-## 📊 Plan Tracker & Interactive Dashboard
+## 📊 Interactive Dashboard
 
-The **Tracker View** converts a static roadmap into an active project management tool:
-- **Checkbox Feedback**: Striking through completed tasks triggers an instant database update (auto-save).
-- **Progress Analytics**: A dynamic progress bar provides real-time insights into completion percentage.
-- **Resource Repository**: Displays curated resources for every topic discovered during the planning phase.
-- **.ics Export**: Allows users to download their entire roadmap as a calendar file with a custom start date.
+The frontend transforms static JSON plans into an active project management tool:
+- **Plan Tracker**: Features auto-saving checkboxes and dynamic progress bars.
+- **.ics Export**: Generates iCalendar files with custom start dates for offline scheduling.
+- **Responsive UI**: A modern, glassmorphism-inspired dashboard for seamless navigation.
 
 ---
 
 ## 🛠️ Technology Stack
 - **Framework**: Python 3.10+, LangGraph.
-- **Database**: SQLite (built-in relational storage).
-- **API**: Flask (Backend), Vanilla JS (Frontend).
-- **LLM**: Azure OpenAI (GPT-4o).
-- **Search**: `duckduckgo-search` (Live industry events & resources).
-- **Calendaring**: iCalendar (.ics) generation for offline scheduling.
-- **Google Integration**: OAuth 2.0 flow for Google Tasks synchronization.
+- **Frontend**: Vanilla JS, Glassmorphism CSS.
+- **Database**: SQLite.
+- **APIs**: Azure OpenAI (GPT-4o), Google Tasks API.
+- **Search**: DuckDuckGo.
