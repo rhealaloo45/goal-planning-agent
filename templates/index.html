@@ -26,7 +26,7 @@
             </div>
             <div style="display: flex; gap: 12px; align-items: center;">
                 <button class="nav-btn" id="navNewBtn" onclick="resetApp()">New Plan</button>
-                <button class="nav-btn" id="navCalendarBtn" style="display: none;" onclick="exportCalendar()">Export .ics</button>
+                <button class="nav-btn" id="navCalendarBtn" style="display: none;" onclick="openCalendarModal()">Export .ics</button>
             </div>
         </div>
     </header>
@@ -140,7 +140,8 @@
                 <div class="tracker-nav">
                     <button class="btn-back" onclick="switchTab('myplans')">← Back to Plans</button>
                     <div id="trackerGoalTitle" style="font-weight: 800; font-size: 1.2rem;">Track Your Progress</div>
-                    <div style="font-size: 0.7rem; color: var(--success); font-weight: 700;">● AUTO-SAVED</div>
+                    <button class="nav-btn" style="margin-left: 12px; background: var(--bg-hover);" onclick="openCalendarModal()">Export .ics</button>
+                    <div style="font-size: 0.7rem; color: var(--success); font-weight: 700; margin-left: auto;">● AUTO-SAVED</div>
                 </div>
                 <div class="progress-bar-container">
                     <div class="progress-info">
