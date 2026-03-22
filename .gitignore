@@ -214,3 +214,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Secrets & Local Data
+credentials.json
+token.json
+.env
+*.db
+!agent/nodes/*.py
+
+# Google API credentials
+credentials.json
+token.json

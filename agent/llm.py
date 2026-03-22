@@ -26,7 +26,7 @@ def _get_client():
         _client = AzureOpenAI(
             azure_endpoint=endpoint,
             api_key=api_key,
-            api_version="2024-12-01-preview",
+            api_version="2024-08-01-preview",
         )
     return _client
 
@@ -48,6 +48,7 @@ def call_llm(prompt: str, system_prompt: str = "You are a helpful AI assistant."
                 ],
                 temperature=0.7,
                 max_tokens=4096,
+                timeout=30 # Prevent long hangs
             )
             return response.choices[0].message.content.strip()
         except Exception as e:

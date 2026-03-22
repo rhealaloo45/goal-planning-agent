@@ -32,6 +32,10 @@ from agent.nodes.optimizer import optimizer_node
 from agent.nodes.formatter import formatter_node
 from agent.nodes.refinement import refinement_node
 
+# ── New Integration Nodes ──
+from agent.nodes.feasibility_checker import feasibility_checker_node
+from agent.nodes.task_sync import task_sync_node
+
 
 def build_main_graph() -> StateGraph:
     """
@@ -54,26 +58,27 @@ def build_main_graph() -> StateGraph:
     g.set_entry_point("router")
 
     # ── Conditional: Router decides next node ──
+    # ── Router decides next node ──
     g.add_conditional_edges(
         "router",
         route_decision,
         {
             "clarify": "clarifier",
-            "plan": "planner",
+            "plan": "feasibility",
             "refine": "refinement",
         },
     )
 
-    # ── Clarifier → END (return questions to user) ──
+    g.add_node("feasibility", feasibility_checker_node)
+    g.add_edge("feasibility", "planner")
+
+    # ── Clarifier → END ──
     g.add_edge("clarifier", END)
 
-    # ── Planner → Search ──
+    # ── Planner → Search → Critic ↔ Optimizer → Formatter → END ──
     g.add_edge("planner", "search")
-
-    # ── Search → Critic ──
     g.add_edge("search", "critic")
 
-    # ── Conditional: Critic decides accept or optimize ──
     g.add_conditional_edges(
         "critic",
         route_after_critic,
@@ -83,10 +88,7 @@ def build_main_graph() -> StateGraph:
         },
     )
 
-    # ── Optimizer loops back to Critic (skip search on loop) ──
     g.add_edge("optimizer", "critic")
-
-    # ── Formatter → END ──
     g.add_edge("formatter", END)
 
     # ── Refinement → Formatter → END ──
@@ -125,6 +127,8 @@ def build_continue_graph() -> StateGraph:
     g.add_edge("formatter", END)
 
     return g
+
+
 
 
 # ── Compile once at import time ──

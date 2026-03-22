@@ -86,10 +86,27 @@ def _clean_json(raw: str) -> str:
 
 
 def _normalize(plan: dict):
-    """Normalize LLM keys: phase→week, tasks→topics."""
+    """Normalize LLM keys: phase/period → canonical field."""
+    # We want to support 'week', 'month', 'year' or just 'period'
+    # But the frontend often looks for these specific keys.
+    # To keep things simple and unified while remaining unit-aware:
+    unit = str(plan.get("timeline_unit", "Week")).title()
+    key_to_use = unit.lower() if unit in ["Week", "Month", "Year"] else "period"
+    
     for p in plan.get("timeline", []):
-        if "phase" in p and "week" not in p:
-            p["week"] = p.pop("phase")
+        # Consolidation logic: ensure we have a common key but also preserve labels
+        labels = ["week", "period", "phase", "month", "year"]
+        found_key = None
+        for k in labels:
+            if k in p: 
+                found_key = k
+                break
+        
+        # If we found a label but it's not our canonical key, alias it
+        if found_key and found_key != key_to_use:
+            p[key_to_use] = p.get(found_key)
+
+        # Ensure topics are normalized
         if "tasks" in p and "topics" not in p:
             p["topics"] = [
                 {

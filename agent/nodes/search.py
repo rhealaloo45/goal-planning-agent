@@ -28,18 +28,18 @@ def search_events_node(state: AgentState) -> dict:
     
     search_results = []
     try:
-        with DDGS() as ddgs:
-            # We use text search which is often more reliable for finding websites
-            results = ddgs.text(query, max_results=10)
+        # Direct call with DDGS (more resilient to initialization issues)
+        results = DDGS().text(query, max_results=5)
+        if results:
             for r in results:
                 search_results.append({
                     "title": r.get("title", ""),
                     "snippet": r.get("body", r.get("snippet", "")),
                     "url": r.get("href", r.get("link", ""))
                 })
+        print(f"[SearchNode] Found {len(search_results)} search results.")
     except Exception as e:
-        print(f"[SearchNode] Search error: {e}")
-        # We continue to LLM logic even if search fails to get "recurring/known" events
+        print(f"[SearchNode] Search failed (continuing without live web results): {e}")
 
     # 2. Use LLM to extract or SUGGEST events if search is empty
     context = "\n\n".join([f"Source: {r['title']}\nSnippet: {r['snippet']}\nURL: {r['url']}" for r in search_results])

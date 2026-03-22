@@ -52,5 +52,8 @@ def router_node(state: AgentState) -> dict:
 
 
 def route_decision(state: AgentState) -> str:
-    """Conditional edge function."""
-    return state.get("route", "plan")
+    """Conditional edge function. Defaults to 'plan' if state is missing route."""
+    route = state.get("route")
+    if not route:
+        return "plan"
+    return route

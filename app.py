@@ -17,7 +17,9 @@ from flask import Flask, jsonify, request, render_template
 from dotenv import load_dotenv
 
 from agent.graph import main_graph, continue_graph
+from agent.nodes.task_sync import task_sync_node
 from db import db
+from datetime import datetime
 
 load_dotenv()
 app = Flask(__name__)
@@ -53,16 +55,25 @@ def start():
         "critic_feedback": {},
         "iteration_count": 0,
         "user_instruction": "",
-        "route": "",
+        "route": "plan",
         "events": [],
         "timeline_unit": "Week",
+        "google_task_ids": {},
     }
 
     print(f"\n{'='*50}")
     print(f"[/start] Goal: '{goal}'")
     print(f"{'='*50}")
 
-    result = main_graph.invoke(initial_state)
+    print(f"[/start] Running LangGraph pipeline...")
+    try:
+        result = main_graph.invoke(initial_state)
+    except Exception as e:
+        print(f"[/start] FATAL GRAPH ERROR: {e}")
+        return jsonify({"error": f"Internal Graph Error: {e}"}), 500
+
+    print(f"[/start] → Final Keys: {list(result.keys())}")
+    print(f"[/start] → route={result.get('route')} | status={result.get('status')} | plan={'YES' if result.get('plan') else 'NO'}")
 
     print(f"[/start] → status={result.get('status')} | iterations={result.get('iteration_count', 0)} | score={result.get('critic_score', '-')}")
     _last_state = result
@@ -200,13 +211,29 @@ def reset():
 
 @app.route("/save", methods=["POST"])
 def save():
+    """Manual save that ALSO triggers Google Tasks sync."""
     data = request.get_json(force=True)
     goal = data.get("goal")
     plan = data.get("plan")
     if not goal or not plan:
         return jsonify({"error": "Goal and plan are required to save."}), 400
     
+    # 1. Save to local DB
     plan_id = db.save_plan(goal, plan)
+    
+    # 2. Trigger Google Tasks Sync (only on manual save as requested)
+    try:
+        # We wrap in a partial state for the node
+        state = {"goal": goal, "plan": plan, "google_task_ids": {}}
+        sync_result = task_sync_node(state)
+        
+        # 3. Update DB with new task IDs if sync worked
+        if sync_result.get("google_task_ids"):
+            db.update_autonomous_fields(plan_id, {"google_task_ids": sync_result["google_task_ids"]})
+            
+    except Exception as e:
+        print(f"[/save] Google Tasks sync failed but data is locally saved: {e}")
+
     return jsonify({"success": True, "id": plan_id})
 
 @app.route("/plans", methods=["GET"])

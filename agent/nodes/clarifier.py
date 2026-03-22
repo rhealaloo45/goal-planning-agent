@@ -38,10 +38,15 @@ def clarifier_node(state: AgentState) -> dict:
             "questions": questions,
             "status": "needs_clarification",
         }
-    except (json.JSONDecodeError, KeyError):
-        # Fallback: skip clarification, let planner handle it
-        print("[Clarifier] Parse failed, skipping to planner")
-        return {"clarified": True, "route": "plan"}
+    except Exception as e:
+        print(f"[Clarifier] Parse failed ({e}), using default questions...")
+        return {
+            "status": "needs_clarification",
+            "questions": [
+                {"question": "What is your primary focus area within this goal?", "options": ["Acquiring skills", "Completing a project", "Certification/Exam"]},
+                {"question": "How much time per week can you realistically commit?", "options": ["5-10 hours", "10-20 hours", "Full-time immersion"]}
+            ]
+        }
 
 
 def _clean_json(raw: str) -> str:

@@ -177,6 +177,21 @@
         </div>
     </div>
 
+    <!-- Calendar Export Modal -->
+    <div class="calendar-modal-overlay" id="calendarModal">
+        <div class="card calendar-card" style="width: 400px; padding: 32px; box-shadow: 0 32px 64px rgba(0,0,0,0.5);">
+            <div class="sidebar-section-title" style="margin-bottom: 24px; color: var(--accent);">CHOOSE STARTING DATE</div>
+            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 24px;">Select the Monday you want to start this roadmap.</p>
+            
+            <input type="date" id="calendarStartDate" class="goal-textarea" style="margin-bottom: 24px;">
+            
+            <div style="display: flex; gap: 12px;">
+                <button class="nav-btn" style="flex:1; background: var(--accent); color: white;" onclick="exportCalendar()">Download .ics</button>
+                <button class="nav-btn" style="flex:1; background: var(--bg-hover);" onclick="closeCalendarModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/js/app.js"></script>
 </body>
 </html>

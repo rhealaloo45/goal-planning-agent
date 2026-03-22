@@ -459,7 +459,7 @@ async function resetAll() {
 async function saveCurrentPlan() {
     if (!currentPlan) return;
     try {
-        showLoader('Saving plan...');
+        showLoader('Saving plan and syncing with Google Tasks...');
         const res = await fetch('/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -467,13 +467,43 @@ async function saveCurrentPlan() {
         });
         const data = await res.json();
         if (data.success) {
-            alert('Plan saved to "My Plans"!');
+            alert('Plan saved to "My Plans" and synced to Google Tasks!');
             $('btnSavePlan').style.display = 'none';
+            // Auto-trigger initial autonomous sync for email
+            await triggerAutonomousSync(data.id, true);
         }
     } catch (err) {
         alert('Save failed: ' + err.message);
     } finally {
         hideLoader();
+    }
+}
+
+async function triggerAutonomousSync(id, isInitial = false) {
+    const targetId = id || currentPlanID;
+    if (!targetId) return;
+    
+    try {
+        if (!isInitial) showLoader('AI is analyzing your progress...');
+        const res = await fetch('/autonomous-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: targetId })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            if (!isInitial) {
+                alert(`AI Sync Complete!\nStatus: ${data.drift_status.toUpperCase()}\nProgress: ${data.metrics.completion_rate}%`);
+                renderTrackerView(); // Refresh if plan adjusted
+            }
+            console.log('[Autonomous] Sync successful:', data);
+        }
+    } catch (err) {
+        console.error('[Autonomous] Sync failed:', err);
+        if (!isInitial) alert('AI Analysis failed, but your progress is saved locally.');
+    } finally {
+        if (!isInitial) hideLoader();
     }
 }
 
@@ -534,9 +564,14 @@ async function openPlanTracker(id) {
         if (data.error) throw new Error(data.error);
 
         currentPlanID = id;
-        currentPlan = data.plan;
+        currentPlan = data.plan || {};
         completedTasks = data.completed_tasks || [];
-        timelineUnit = currentPlan.timeline_unit || 'Week';
+        timelineUnit = (currentPlan && currentPlan.timeline_unit) ? currentPlan.timeline_unit : 'Week';
+
+        if (!currentPlan.timeline) {
+            alert('Plan data is missing from this record.');
+            return;
+        }
 
         $('trackerGoalTitle').textContent = data.goal;
         switchTab('tracker');
@@ -741,7 +776,10 @@ async function refineSavedPlan() {
     }
 }
 
-function openCalendarModal() { $('calendarModal').classList.add('active'); }
+function openCalendarModal() { 
+    $('calendarStartDate').value = new Date().toISOString().split('T')[0];
+    $('calendarModal').classList.add('active'); 
+}
 function closeCalendarModal() { $('calendarModal').classList.remove('active'); }
 
 function exportCalendar() {
