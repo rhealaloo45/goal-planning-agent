@@ -44,4 +44,8 @@ def formatter_node(state: AgentState) -> dict:
     plan.setdefault("execution_strategy", "")
 
     print(f"[Formatter] Plan formatted: {len(plan.get('timeline', []))} weeks")
-    return {"plan": plan, "status": "completed"}
+    return {
+        "plan": plan, 
+        "status": "completed",
+        "status_message": "Formatting the final roadmap..."
+    }

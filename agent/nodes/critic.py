@@ -65,13 +65,18 @@ def critic_node(state: AgentState) -> dict:
             "suggestions": result.get("suggestions", []),
         }
         print(f"[Critic] Score: {score}/10 | Issues: {len(feedback['issues'])}")
-        return {"critic_score": score, "critic_feedback": feedback}
+        return {
+            "critic_score": score, 
+            "critic_feedback": feedback,
+            "status_message": "Reviewing the quality of your plan..."
+        }
     except (json.JSONDecodeError, KeyError, ValueError):
         # Parse failed — accept the plan
         print("[Critic] Parse failed, accepting plan")
         return {
             "critic_score": SCORE_THRESHOLD,
             "critic_feedback": {"issues": [], "suggestions": []},
+            "status_message": "Reviewing the quality of your plan..."
         }
 
 

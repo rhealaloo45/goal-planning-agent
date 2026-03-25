@@ -848,6 +848,81 @@ input, textarea { font-family: inherit; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ──────── Agent Thinking Panel ──────── */
+.thinking-card {
+    background: white;
+    border-radius: var(--radius-lg);
+    padding: 40px;
+    width: 480px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+    animation: fadeIn 0.3s ease-out;
+}
+
+.progress-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 24px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 8px;
+    scrollbar-width: thin;
+}
+
+.progress-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    animation: slideIn 0.3s ease-out;
+}
+
+.progress-item.complete {
+    color: var(--success);
+}
+
+.progress-item.current {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.progress-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.progress-icon.loading {
+    border: 2px solid var(--accent-light);
+    border-top: 2px solid var(--accent);
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    animation: spin 1s linear infinite;
+}
+
+.progress-icon.check {
+    color: var(--success);
+    font-weight: 800;
+}
+
+.final-status {
+    text-align: center;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-weight: 700;
+    color: var(--success);
+    margin-top: 16px;
+}
+
+@keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+
 /* Responsive */
 @media (max-width: 1024px) {
     .sidebar { width: 320px; }

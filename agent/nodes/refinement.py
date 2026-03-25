@@ -45,10 +45,13 @@ def refinement_node(state: AgentState) -> dict:
         updated = json.loads(_clean_json(raw))
         _normalize(updated)
         print(f"[Refinement] Plan refined for: \"{instruction[:50]}\"")
-        return {"plan": updated}
+        return {
+            "plan": updated,
+            "status_message": "Applying your requested changes..."
+        }
     except (json.JSONDecodeError, KeyError):
         print("[Refinement] Parse failed, plan unchanged")
-        return {}
+        return {"status_message": "Applying your requested changes..."}
 
 
 def _clean_json(raw: str) -> str:

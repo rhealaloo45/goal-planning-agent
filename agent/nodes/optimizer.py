@@ -44,10 +44,17 @@ def optimizer_node(state: AgentState) -> dict:
         improved = json.loads(_clean_json(raw))
         _normalize(improved)
         print(f"[Optimizer] Plan improved (iteration {iteration + 1})")
-        return {"plan": improved, "iteration_count": iteration + 1}
+        return {
+            "plan": improved, 
+            "iteration_count": iteration + 1,
+            "status_message": "Improving the plan..."
+        }
     except (json.JSONDecodeError, KeyError):
         print("[Optimizer] Parse failed, keeping current plan")
-        return {"iteration_count": iteration + 1}
+        return {
+            "iteration_count": iteration + 1,
+            "status_message": "Improving the plan..."
+        }
 
 
 def _clean_json(raw: str) -> str:

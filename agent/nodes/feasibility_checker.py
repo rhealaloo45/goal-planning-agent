@@ -46,7 +46,10 @@ def feasibility_checker_node(state: AgentState) -> dict:
 
     try:
         status_data = json.loads(_clean_json(raw))
-        return {"feasibility_status": status_data}
+        return {
+            "feasibility_status": status_data,
+            "status_message": "Checking if your goal is realistic..."
+        }
     except Exception as e:
         print(f"[FeasibilityChecker] Parse failed: {e}")
         return {
@@ -56,7 +59,8 @@ def feasibility_checker_node(state: AgentState) -> dict:
                 "reasoning": "Could not parse feasibility analysis.",
                 "suggestions": [],
                 "risks": []
-            }
+            },
+            "status_message": "Checking if your goal is realistic..."
         }
 
 def _clean_json(raw: str) -> str:

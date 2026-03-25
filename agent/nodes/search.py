@@ -77,10 +77,16 @@ def search_events_node(state: AgentState) -> dict:
             events = [events] if isinstance(events, dict) else []
         
         print(f"[SearchNode] Result: {len(events)} events found.")
-        return {"events": events}
+        return {
+            "events": events,
+            "status_message": "Searching for resources and events..."
+        }
     except Exception as e:
         print(f"[SearchNode] LLM parse error: {e}")
-        return {"events": []}
+        return {
+            "events": [],
+            "status_message": "Searching for resources and events..."
+        }
 
 
 def _clean_json(raw: str) -> str:

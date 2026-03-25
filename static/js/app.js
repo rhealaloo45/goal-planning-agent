@@ -31,8 +31,93 @@ const clarifyQuestions = $('clarifyQuestions');
 
 function show(el) { if(el) { el.classList.remove('hidden'); el.style.display = ''; } }
 function hide(el) { if(el) { el.classList.add('hidden'); el.style.display = 'none'; } }
-function showLoader(txt) { loader.classList.add('active'); if(txt) console.log(txt); }
+function showLoader(txt) { 
+    clearProgress();
+    loader.classList.add('active'); 
+    if(txt) updateProgress(txt);
+}
 function hideLoader() { loader.classList.remove('active'); }
+
+// ────── Progress UI Helpers ──────
+function updateProgress(message) {
+    const list = $('progressList');
+    if (!list) return;
+
+    const current = list.querySelector('.progress-item.current');
+    if (current) {
+        current.classList.remove('current');
+        current.classList.add('complete');
+        const icon = current.querySelector('.progress-icon');
+        icon.className = 'progress-icon check';
+        icon.innerHTML = '✓';
+    }
+
+    const item = document.createElement('div');
+    item.className = 'progress-item current';
+    item.innerHTML = `
+        <div class="progress-icon loading"></div>
+        <div class="progress-text">${message}</div>
+    `;
+    list.appendChild(item);
+    list.scrollTop = list.scrollHeight;
+}
+
+function clearProgress() {
+    const list = $('progressList');
+    if (list) list.innerHTML = '';
+    const final = $('finalStatus');
+    if (final) final.classList.add('hidden');
+}
+
+function showFinalStatus(msg = "Plan generated successfully.") {
+    const current = $('progressList').querySelector('.progress-item.current');
+    if (current) {
+        current.classList.remove('current');
+        current.classList.add('complete');
+        const icon = current.querySelector('.progress-icon');
+        icon.className = 'progress-icon check';
+        icon.innerHTML = '✓';
+    }
+    const final = $('finalStatus');
+    if (final) {
+        final.textContent = msg;
+        final.classList.remove('hidden');
+    }
+}
+
+async function handleStream(response, onResult) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split('\n\n');
+        buffer = chunks.pop();
+
+        for (const chunk of chunks) {
+            if (chunk.startsWith('data: ')) {
+                try {
+                    const json = JSON.parse(chunk.substring(6));
+                    if (json.type === 'status') {
+                        updateProgress(json.message);
+                    } else if (json.type === 'result') {
+                        showFinalStatus(json.data.message || "Plan generated successfully.");
+                        await new Promise(r => setTimeout(r, 1000));
+                        onResult(json.data);
+                    } else if (json.type === 'error') {
+                        throw new Error(json.message);
+                    }
+                } catch (e) {
+                    console.error("Stream parse error:", e);
+                }
+            }
+        }
+    }
+}
 
 async function api(endpoint, body = {}) {
     const res = await fetch(endpoint, {
@@ -61,27 +146,31 @@ async function submitGoal() {
 
     try {
         btnGenerate.disabled = true;
-        showLoader('Strategizing and researching your roadmap...');
-        const data = await api('/start', { goal });
+        showLoader('Analyzing your goal...');
+        
+        const response = await fetch('/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ goal })
+        });
 
-        if (data.status === 'needs_clarification' && data.questions && data.questions.length) {
-            currentQuestions = data.questions;
-            renderClarification(data.questions);
-            show(clarifySection);
-            hide($('goalInputSection')); // Clear clutter
-            hide(welcomeView);
-        } else if (data.plan) {
-            currentPlan = data.plan;
-            if (data.events) currentEvents = data.events;
-            if (data.timeline_unit) timelineUnit = data.timeline_unit;
-            
-            if (data.events) currentEvents = data.events;
-            if (data.timeline_unit) timelineUnit = data.timeline_unit;
-            
-            renderFullPlan(data.plan);
-            renderEvents(currentEvents);
-            showPlanUI();
-        }
+        await handleStream(response, (data) => {
+            if (data.status === 'needs_clarification' && data.questions && data.questions.length) {
+                currentQuestions = data.questions;
+                renderClarification(data.questions);
+                show(clarifySection);
+                hide($('goalInputSection'));
+                hide(welcomeView);
+            } else if (data.plan) {
+                currentPlan = data.plan;
+                if (data.events) currentEvents = data.events;
+                if (data.timeline_unit) timelineUnit = data.timeline_unit;
+                
+                renderFullPlan(data.plan);
+                renderEvents(currentEvents);
+                showPlanUI();
+            }
+        });
     } catch (err) {
         alert('Error: ' + err.message);
     } finally {
@@ -178,17 +267,23 @@ async function submitClarification() {
     });
 
     try {
-        showLoader('Generating your plan...');
-        const data = await api('/clarify', { goal: currentGoal, answers });
-        if (data.plan) {
-            currentPlan = data.plan;
-            currentEvents = data.events || [];
-            timelineUnit = data.timeline_unit || 'Week';
-            
-            renderFullPlan(data.plan);
-            renderEvents(currentEvents);
-            showPlanUI();
-        }
+        showLoader('Processing answers...');
+        const response = await fetch('/clarify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ goal: currentGoal, answers })
+        });
+
+        await handleStream(response, (data) => {
+            if (data.plan) {
+                currentPlan = data.plan;
+                currentEvents = data.events || [];
+                timelineUnit = data.timeline_unit || 'Week';
+                renderFullPlan(data.plan);
+                renderEvents(currentEvents);
+                showPlanUI();
+            }
+        });
     } catch (err) {
         alert('Error: ' + err.message);
     } finally { hideLoader(); }
@@ -197,16 +292,22 @@ async function submitClarification() {
 async function skipClarification() {
     try {
         showLoader('Generating plan...');
-        const data = await api('/clarify', { goal: currentGoal, answers: {} });
-        if (data.plan) {
-            currentPlan = data.plan;
-            currentEvents = data.events || [];
-            timelineUnit = data.timeline_unit || 'Week';
-            
-            renderFullPlan(data.plan);
-            renderEvents(currentEvents);
-            showPlanUI();
-        }
+        const response = await fetch('/clarify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ goal: currentGoal, answers: {} })
+        });
+
+        await handleStream(response, (data) => {
+            if (data.plan) {
+                currentPlan = data.plan;
+                currentEvents = data.events || [];
+                timelineUnit = data.timeline_unit || 'Week';
+                renderFullPlan(data.plan);
+                renderEvents(currentEvents);
+                showPlanUI();
+            }
+        });
     } catch (err) { alert('Error: ' + err.message); }
     finally { hideLoader(); }
 }
@@ -405,25 +506,30 @@ async function sendChatMessage() {
     if (!msg || !currentPlan) return;
 
     try {
-        showLoader('Refining plan...');
+        showLoader('Analyzing request...');
         $('chatInput').value = '';
         
-        // Pass the CURRENT editable state back to server
-        const data = await api('/refine', {
-            goal: currentGoal,
-            plan: currentPlan,
-            message: msg
+        const response = await fetch('/refine', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                goal: currentGoal,
+                plan: currentPlan,
+                message: msg
+            })
         });
 
-        if (data.success && data.plan) {
-            currentPlan = data.plan;
-            currentEvents = data.events || [];
-            timelineUnit = data.timeline_unit || 'Week';
-            renderFullPlan(currentPlan);
-            renderEvents(currentEvents);
-        } else {
-            alert(data.message || 'Could not update plan.');
-        }
+        await handleStream(response, (data) => {
+            if (data.success && data.plan) {
+                currentPlan = data.plan;
+                currentEvents = data.events || [];
+                timelineUnit = data.timeline_unit || 'Week';
+                renderFullPlan(currentPlan);
+                renderEvents(currentEvents);
+            } else {
+                alert(data.message || 'Could not update plan.');
+            }
+        });
     } catch (err) {
         alert('Chat error: ' + err.message);
     } finally {
@@ -459,19 +565,20 @@ async function resetAll() {
 async function saveCurrentPlan() {
     if (!currentPlan) return;
     try {
-        showLoader('Saving plan and syncing with Google Tasks...');
-        const res = await fetch('/save', {
+        showLoader('Initiating save...');
+        const response = await fetch('/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ goal: currentGoal, plan: currentPlan })
         });
-        const data = await res.json();
-        if (data.success) {
-            alert('Plan saved to "My Plans" and synced to Google Tasks!');
-            $('btnSavePlan').style.display = 'none';
-            // Auto-trigger initial autonomous sync for email
-            await triggerAutonomousSync(data.id, true);
-        }
+
+        await handleStream(response, (data) => {
+            if (data.success) {
+                alert('Plan saved to "My Plans" and synced to Google Tasks!');
+                $('btnSavePlan').style.display = 'none';
+                triggerAutonomousSync(data.id, true);
+            }
+        });
     } catch (err) {
         alert('Save failed: ' + err.message);
     } finally {
@@ -739,7 +846,6 @@ async function refineSavedPlan() {
     try {
         showLoader('Updating plan with AI...');
         $('trackerChatInput').value = '';
-        // Display user message in history
         const userMsg = document.createElement('div');
         userMsg.className = 'chat-bubble-wrapper user';
         userMsg.innerHTML = `
@@ -749,26 +855,28 @@ async function refineSavedPlan() {
         $('trackerChatArea').appendChild(userMsg);
         $('trackerChatArea').scrollTop = $('trackerChatArea').scrollHeight;
 
-        const res = await fetch('/save-refine', {
+        const response = await fetch('/save-refine', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: currentPlanID, message: msg })
         });
-        const data = await res.json();
-        if (data.success && data.plan) {
-            currentPlan = data.plan;
-            renderTrackerView();
-            const msgEl = document.createElement('div');
-            msgEl.className = 'chat-bubble-wrapper ai';
-            msgEl.innerHTML = `
-                <div class="chat-label">Agent</div>
-                <div class="chat-bubble">✅ Plan adjusted successfully based on your request.</div>
-            `;
-            $('trackerChatArea').appendChild(msgEl);
-            $('trackerChatArea').scrollTop = $('trackerChatArea').scrollHeight;
-        } else {
-            alert(data.message || 'Update failed.');
-        }
+
+        await handleStream(response, (data) => {
+            if (data.success && data.plan) {
+                currentPlan = data.plan;
+                renderTrackerView();
+                const msgEl = document.createElement('div');
+                msgEl.className = 'chat-bubble-wrapper ai';
+                msgEl.innerHTML = `
+                    <div class="chat-label">Agent</div>
+                    <div class="chat-bubble">✅ Plan adjusted successfully based on your request.</div>
+                `;
+                $('trackerChatArea').appendChild(msgEl);
+                $('trackerChatArea').scrollTop = $('trackerChatArea').scrollHeight;
+            } else {
+                alert(data.message || 'Update failed.');
+            }
+        });
     } catch (err) {
         alert('Chat error: ' + err.message);
     } finally {

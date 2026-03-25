@@ -11,9 +11,17 @@
 </head>
 <body>
 
-    <!-- Loading State -->
+    <!-- Loading State / Agent Thinking Panel -->
     <div class="loading-overlay" id="loader">
-        <div class="loader"></div>
+        <div class="thinking-card">
+            <div class="sidebar-section-title" style="margin-bottom: 24px; color: var(--accent);">AI AGENT WORKFLOW</div>
+            <div id="progressList" class="progress-list">
+                <!-- Progress items will be injected here -->
+            </div>
+            <div id="finalStatus" class="final-status hidden">
+                Plan generated successfully.
+            </div>
+        </div>
     </div>
 
     <!-- Global Sidebar & Generator Concept (Unifying the Sidebar Logic) -->

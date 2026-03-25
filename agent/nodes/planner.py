@@ -62,7 +62,8 @@ def planner_node(state: AgentState) -> dict:
             "plan": plan, 
             "timeline_unit": str(unit).title(),
             "iteration_count": 0, 
-            "critic_score": 0
+            "critic_score": 0,
+            "status_message": "Creating your roadmap..."
         }
     except Exception as e:
         print(f"[Planner] Parse failed: {e}")
@@ -70,7 +71,8 @@ def planner_node(state: AgentState) -> dict:
             "plan": _fallback(goal), 
             "timeline_unit": "Week",
             "iteration_count": 0, 
-            "critic_score": 0
+            "critic_score": 0,
+            "status_message": "Creating your roadmap..."
         }
 
 

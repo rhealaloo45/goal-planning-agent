@@ -19,12 +19,12 @@ def router_node(state: AgentState) -> dict:
     # 1. Refinement takes precedence
     if state.get("user_instruction") and state.get("plan"):
         print("[Router] → refine (active request)")
-        return {"route": "refine"}
+        return {"route": "refine", "status_message": "Analyzing your goal..."}
 
     # 2. If already clarified (by node or user skip), proceed to plan
     if state.get("clarified"):
         print("[Router] → plan (already clarified)")
-        return {"route": "plan"}
+        return {"route": "plan", "status_message": "Analyzing your goal..."}
 
     # 3. Use LLM to decide if clarification is needed
     goal = state.get("goal", "")
@@ -45,10 +45,10 @@ def router_node(state: AgentState) -> dict:
 
     if "CLARIFY" in decision:
         print("[Router] → clarify (LLM decision)")
-        return {"route": "clarify"}
+        return {"route": "clarify", "status_message": "Analyzing your goal..."}
     
     print("[Router] → plan (LLM decision)")
-    return {"route": "plan", "clarified": True}
+    return {"route": "plan", "clarified": True, "status_message": "Analyzing your goal..."}
 
 
 def route_decision(state: AgentState) -> str:

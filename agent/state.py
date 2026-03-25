@@ -34,3 +34,6 @@ class AgentState(TypedDict, total=False):
 
     # ── External Integrations ──
     google_task_ids: dict               # Map internal tasks → Google Task IDs
+    
+    # ── Progress Tracking ──
+    status_message: str                 # Current progress status message

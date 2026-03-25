@@ -70,8 +70,14 @@ def task_sync_node(state: AgentState) -> dict:
                 new_task = service.tasks().insert(tasklist=target_list_id, body=task_body).execute()
                 google_task_ids[task_name] = new_task['id']
                 
-        return {"google_task_ids": google_task_ids}
+        return {
+            "google_task_ids": google_task_ids,
+            "status_message": "Syncing tasks with Google Tasks..."
+        }
         
     except Exception as e:
         print(f"[TaskSync] Sync failed: {e}")
-        return {"google_task_ids": {}}
+        return {
+            "google_task_ids": {},
+            "status_message": "Syncing tasks with Google Tasks..."
+        }

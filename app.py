@@ -13,13 +13,13 @@ Run: python app.py  |  http://localhost:1644
 """
 
 import os
-from flask import Flask, jsonify, request, render_template
-from dotenv import load_dotenv
-
 from agent.graph import main_graph, continue_graph
 from agent.nodes.task_sync import task_sync_node
 from db import db
+import json
 from datetime import datetime
+from flask import Flask, jsonify, request, render_template, Response, stream_with_context
+from dotenv import load_dotenv
 
 load_dotenv()
 app = Flask(__name__)
@@ -43,7 +43,7 @@ def start():
     goal = data.get("goal", "").strip()
     if not goal:
         return jsonify({"error": "Goal is required."}), 400
-
+    
     initial_state = {
         "goal": goal,
         "status": "pending",
@@ -61,31 +61,30 @@ def start():
         "google_task_ids": {},
     }
 
-    print(f"\n{'='*50}")
-    print(f"[/start] Goal: '{goal}'")
-    print(f"{'='*50}")
+    def generate():
+        global _last_state
+        current_state = initial_state
+        try:
+            for event in main_graph.stream(initial_state):
+                for node_name, updates in event.items():
+                    current_state.update(updates)
+                    if "status_message" in updates:
+                        yield f"data: {json.dumps({'type': 'status', 'message': updates['status_message']})}\n\n"
+            
+            _last_state = current_state
+            result_data = {
+                "goal": current_state.get("goal", goal),
+                "status": current_state.get("status", "completed"),
+                "questions": current_state.get("questions", []),
+                "plan": current_state.get("plan"),
+                "events": current_state.get("events", []),
+                "timeline_unit": current_state.get("timeline_unit", "Week"),
+            }
+            yield f"data: {json.dumps({'type': 'result', 'data': result_data})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
-    print(f"[/start] Running LangGraph pipeline...")
-    try:
-        result = main_graph.invoke(initial_state)
-    except Exception as e:
-        print(f"[/start] FATAL GRAPH ERROR: {e}")
-        return jsonify({"error": f"Internal Graph Error: {e}"}), 500
-
-    print(f"[/start] → Final Keys: {list(result.keys())}")
-    print(f"[/start] → route={result.get('route')} | status={result.get('status')} | plan={'YES' if result.get('plan') else 'NO'}")
-
-    print(f"[/start] → status={result.get('status')} | iterations={result.get('iteration_count', 0)} | score={result.get('critic_score', '-')}")
-    _last_state = result
-
-    return jsonify({
-        "goal": result.get("goal", goal),
-        "status": result.get("status", "completed"),
-        "questions": result.get("questions", []),
-        "plan": result.get("plan"),
-        "events": result.get("events", []),
-        "timeline_unit": result.get("timeline_unit", "Week"),
-    })
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 
 @app.route("/clarify", methods=["POST"])
@@ -117,23 +116,30 @@ def clarify():
         "timeline_unit": "Week",
     }
 
-    print(f"\n{'='*50}")
-    print(f"[/clarify] Goal: '{goal}' | Answers: {len(answers)}")
-    print(f"{'='*50}")
+    def generate():
+        global _last_state
+        current_state = state
+        try:
+            for event in continue_graph.stream(state):
+                for node_name, updates in event.items():
+                    current_state.update(updates)
+                    if "status_message" in updates:
+                        yield f"data: {json.dumps({'type': 'status', 'message': updates['status_message']})}\n\n"
+            
+            _last_state = current_state
+            result_data = {
+                "goal": current_state.get("goal", goal),
+                "status": current_state.get("status", "completed"),
+                "questions": [],
+                "plan": current_state.get("plan"),
+                "events": current_state.get("events", []),
+                "timeline_unit": current_state.get("timeline_unit", "Week"),
+            }
+            yield f"data: {json.dumps({'type': 'result', 'data': result_data})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
-    result = continue_graph.invoke(state)
-
-    print(f"[/clarify] → status={result.get('status')} | iterations={result.get('iteration_count', 0)} | score={result.get('critic_score', '-')}")
-    _last_state = result
-
-    return jsonify({
-        "goal": result.get("goal", goal),
-        "status": result.get("status", "completed"),
-        "questions": [],
-        "plan": result.get("plan"),
-        "events": result.get("events", []),
-        "timeline_unit": result.get("timeline_unit", "Week"),
-    })
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 
 @app.route("/refine", methods=["POST"])
@@ -167,24 +173,32 @@ def refine():
         "timeline_unit": data.get("timeline_unit", "Week"),
     }
 
-    print(f"\n{'='*50}")
-    print(f"[/refine] Instruction: '{message[:60]}'")
-    print(f"{'='*50}")
+    def generate():
+        global _last_state
+        current_state = state
+        try:
+            for event in main_graph.stream(state):
+                for node_name, updates in event.items():
+                    current_state.update(updates)
+                    if "status_message" in updates:
+                        yield f"data: {json.dumps({'type': 'status', 'message': updates['status_message']})}\n\n"
+            
+            if current_state.get("plan"):
+                if _last_state:
+                    _last_state["plan"] = current_state["plan"]
+            
+            result_data = {
+                "success": bool(current_state.get("plan")),
+                "plan": current_state.get("plan"),
+                "events": current_state.get("events", []),
+                "timeline_unit": current_state.get("timeline_unit", "Week"),
+                "message": "Plan updated successfully." if current_state.get("plan") else "Could not apply changes."
+            }
+            yield f"data: {json.dumps({'type': 'result', 'data': result_data})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
-    result = main_graph.invoke(state)
-
-    if result.get("plan"):
-        if _last_state:
-            _last_state["plan"] = result["plan"]
-        return jsonify({
-            "success": True, 
-            "plan": result["plan"], 
-            "events": result.get("events", []),
-            "timeline_unit": result.get("timeline_unit", "Week"),
-            "message": "Plan updated successfully."
-        })
-
-    return jsonify({"success": False, "plan": plan, "message": "Could not apply changes."})
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 
 @app.route("/update-plan", methods=["POST"])
@@ -221,20 +235,23 @@ def save():
     # 1. Save to local DB
     plan_id = db.save_plan(goal, plan)
     
-    # 2. Trigger Google Tasks Sync (only on manual save as requested)
-    try:
-        # We wrap in a partial state for the node
-        state = {"goal": goal, "plan": plan, "google_task_ids": {}}
-        sync_result = task_sync_node(state)
-        
-        # 3. Update DB with new task IDs if sync worked
-        if sync_result.get("google_task_ids"):
-            db.update_autonomous_fields(plan_id, {"google_task_ids": sync_result["google_task_ids"]})
+    def generate():
+        try:
+            state = {"goal": goal, "plan": plan, "google_task_ids": {}}
+            # We use stream here too just to provide the status message
+            # Even though task_sync_node is a single function, we wrap it
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Syncing tasks with Google Tasks...'})}\n\n"
             
-    except Exception as e:
-        print(f"[/save] Google Tasks sync failed but data is locally saved: {e}")
+            sync_result = task_sync_node(state)
+            
+            if sync_result.get("google_task_ids"):
+                db.update_autonomous_fields(plan_id, {"google_task_ids": sync_result["google_task_ids"]})
+                
+            yield f"data: {json.dumps({'type': 'result', 'data': {'success': True, 'id': plan_id}})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e), 'id': plan_id})}\n\n"
 
-    return jsonify({"success": True, "id": plan_id})
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 @app.route("/plans", methods=["GET"])
 def list_plans():
@@ -289,12 +306,23 @@ def save_refine():
         "clarification_answers": {}
     }
 
-    result = main_graph.invoke(state)
-    if result.get("plan"):
-        db.update_full_plan(plan_id, result["plan"])
-        return jsonify({"success": True, "plan": result["plan"]})
-    
-    return jsonify({"success": False, "message": "The AI could not refine your saved plan. Please try a different instruction."})
+    def generate():
+        current_state = state
+        try:
+            for event in main_graph.stream(state):
+                for node_name, updates in event.items():
+                    current_state.update(updates)
+                    if "status_message" in updates:
+                        yield f"data: {json.dumps({'type': 'status', 'message': updates['status_message']})}\n\n"
+            
+            if current_state.get("plan"):
+                db.update_full_plan(plan_id, current_state["plan"])
+            
+            yield f"data: {json.dumps({'type': 'result', 'data': {'success': bool(current_state.get('plan')), 'plan': current_state.get('plan')}})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 
 @app.errorhandler(404)
